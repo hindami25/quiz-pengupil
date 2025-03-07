@@ -35,91 +35,104 @@ def wait_for_server(url, timeout=30):
     raise RuntimeError("❌ Server failed to start!")
 
 # Cek server sebelum Selenium berjalan
-BASE_URL = "http://127.0.0.1/quiz-pengupil/"
+BASE_URL = "http://127.0.0.1:8000/"
 wait_for_server(BASE_URL)
 
 # Set up WebDriver
 chrome_options = webdriver.ChromeOptions()
-chrome_options.add_argument("--headless")  # Menjalankan Chrome tanpa GUI
+chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 
 driver = webdriver.Chrome(options=chrome_options)
 driver.implicitly_wait(10)
 
-# List untuk menyimpan hasil test
-test_results = []
-
-def log_result(test_name, status, message=""):
-    result = f"{test_name}: {status} - {message}"
-    print(result)
-    logging.info(result)
-
 def run_test(test_function):
-    """
-    Helper function untuk menjalankan setiap test case tanpa menghentikan eksekusi.
-    Jika ada error, akan dicatat dan test berikutnya tetap dijalankan.
-    """
     try:
         test_function()
-        test_results.append((test_function.__name__, "✅ PASSED", ""))
+        print(f"✅ {test_function.__name__} PASSED")
     except AssertionError as e:
-        test_results.append((test_function.__name__, "❌ FAILED", str(e)))
+        print(f"❌ {test_function.__name__} FAILED: {str(e)}")
     except Exception as e:
-        test_results.append((test_function.__name__, "⚠️ ERROR", str(e)))
+        print(f"⚠️ {test_function.__name__} ERROR: {str(e)}")
+
+def test_register_valid():
+    driver.get(BASE_URL + "register.php")
+    driver.find_element(By.ID, "username").send_keys("user123")
+    driver.find_element(By.ID, "name").send_keys("User Test")
+    driver.find_element(By.ID, "InputEmail").send_keys("user@test.com")
+    driver.find_element(By.ID, "InputPassword").send_keys("Password123!")
+    driver.find_element(By.ID, "InputRePassword").send_keys("Password123!")
+    driver.find_element(By.NAME, "submit").click()
+    assert "index.php" in driver.current_url, "Error: Registrasi gagal."
+
+def test_register_existing_user():
+    driver.get(BASE_URL + "register.php")
+    driver.find_element(By.ID, "username").send_keys("existingUser")
+    driver.find_element(By.NAME, "submit").click()
+    assert "Username sudah terdaftar" in driver.page_source, "Error: Username seharusnya sudah ada."
+
+def test_register_existing_email():
+    driver.get(BASE_URL + "register.php")
+    driver.find_element(By.ID, "InputEmail").send_keys("user@test.com")
+    driver.find_element(By.NAME, "submit").click()
+    assert "Email sudah terdaftar" in driver.page_source, "Error: Email seharusnya sudah ada."
+
+def test_register_password_mismatch():
+    driver.get(BASE_URL + "register.php")
+    driver.find_element(By.ID, "InputPassword").send_keys("Password123!")
+    driver.find_element(By.ID, "InputRePassword").send_keys("WrongPass123!")
+    driver.find_element(By.NAME, "submit").click()
+    assert "Password tidak sama" in driver.page_source, "Error: Password mismatch tidak terdeteksi."
+
+def test_register_empty_fields():
+    driver.get(BASE_URL + "register.php")
+    driver.find_element(By.NAME, "submit").click()
+    assert "Data tidak boleh kosong" in driver.page_source, "Error: Form kosong tidak ditangani."
 
 def test_login_valid():
     driver.get(BASE_URL + "login.php")
-    WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, "username"))).send_keys("testuser123")
-    driver.find_element(By.ID, "InputPassword").send_keys("TestPassword123!")
+    driver.find_element(By.ID, "username").send_keys("validUser")
+    driver.find_element(By.ID, "InputPassword").send_keys("ValidPass123!")
     driver.find_element(By.NAME, "submit").click()
+    assert "index.php" in driver.current_url, "Error: Login gagal."
 
-    time.sleep(2)
-    assert "index.php" in driver.current_url, "Error: Login gagal, tidak dialihkan ke index.php."
-
-def test_login_invalid():
+def test_login_invalid_user():
     driver.get(BASE_URL + "login.php")
-    WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, "username"))).send_keys("wronguser")
-    driver.find_element(By.ID, "InputPassword").send_keys("WrongPass")
+    driver.find_element(By.ID, "username").send_keys("unknownUser")
+    driver.find_element(By.ID, "InputPassword").send_keys("ValidPass123!")
     driver.find_element(By.NAME, "submit").click()
+    assert "Register User Gagal" in driver.page_source, "Error: Username tidak valid tidak ditangani."
 
-    time.sleep(2)
-    assert "Register User Gagal" in driver.page_source, "Error: Pesan gagal login tidak muncul."
-
-def test_login_empty():
+def test_login_wrong_password():
     driver.get(BASE_URL + "login.php")
+    driver.find_element(By.ID, "username").send_keys("validUser")
+    driver.find_element(By.ID, "InputPassword").send_keys("WrongPass123!")
     driver.find_element(By.NAME, "submit").click()
+    assert "Register User Gagal" in driver.page_source, "Error: Password salah tidak ditangani."
 
-    time.sleep(2)
-    assert "Data tidak boleh kosong" in driver.page_source, "Error: Input kosong tidak ditangani dengan benar."
-
-def test_sql_injection_login():
+def test_login_sql_injection():
     driver.get(BASE_URL + "login.php")
-
-    WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, "username"))).send_keys("' OR '1'='1")
-    driver.find_element(By.ID, "InputPassword").send_keys("' OR '1'='1")
+    driver.find_element(By.ID, "username").send_keys("' OR 1=1 --")
+    driver.find_element(By.ID, "InputPassword").send_keys("anything")
     driver.find_element(By.NAME, "submit").click()
+    assert "Register User Gagal" in driver.page_source, "Error: SQL Injection berhasil!"
 
-    time.sleep(2)
-    assert "index.php" not in driver.current_url, "Error: SQL Injection berhasil, sistem tidak aman!"
-
-# Jalankan semua test case menggunakan run_test()
-test_cases = [
+# Daftar test case
+TEST_CASES = [
+    test_register_valid,
+    test_register_existing_user,
+    test_register_existing_email,
+    test_register_password_mismatch,
+    test_register_empty_fields,
     test_login_valid,
-    test_login_invalid,
-    test_login_empty,
-    test_sql_injection_login
+    test_login_invalid_user,
+    test_login_wrong_password,
+    test_login_sql_injection,
 ]
 
-for test in test_cases:
+# Jalankan semua test case
+for test in TEST_CASES:
     run_test(test)
 
-# Cetak hasil semua test dengan format rapi
-print("\n=== TEST RESULTS ===")
-print(f"{'Test Case':<30} {'Status':<10} {'Message'}")
-print("="*80)
-for name, status, message in test_results:
-    print(f"{name:<30} {status:<10} {message}")
-
-# Tutup browser
 driver.quit()
