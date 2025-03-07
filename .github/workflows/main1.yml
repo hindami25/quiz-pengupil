@@ -1,0 +1,39 @@
+name: Selenium Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      selenium:
+        image: selenium/standalone-firefox
+        ports:
+          - 4444:4444
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium
+
+      - name: Run Selenium Tests
+        env:
+          BASE_URL: http://localhost/quiz-pengupil/
+        run: |
+          selenium_register_test.py
