@@ -1,0 +1,87 @@
+name: Selenium Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Create a temporary index.php
+      run: |
+        echo "<?php echo 'Server is running!'; ?>" > index.php
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y php php-cli php-mysql unzip google-chrome-stable mariadb-server mariadb-client curl
+
+    - name: Start MariaDB Service
+      run: |
+        sudo systemctl start mariadb
+        sudo systemctl enable mariadb
+        sudo systemctl restart mariadb
+
+    - name: Setup Database
+      run: |
+        sudo mysql --user=root --execute="CREATE DATABASE IF NOT EXISTS quiz_pengupil;"
+        sudo mysql --user=root quiz_pengupil < db/quiz_pengupil.sql
+        sudo mysql --user=root --execute="GRANT ALL PRIVILEGES ON quiz_pengupil.* TO 'root'@'localhost' IDENTIFIED BY '';"
+        sudo mysql --user=root --execute="FLUSH PRIVILEGES;"
+
+    - name: Verify Database Setup
+      run: |
+        sudo mysql -u root -e "USE quiz_pengupil; SHOW TABLES;"
+
+    - name: Start PHP server
+      run: |
+        nohup php -S 127.0.0.1:8000 -t . > server.log 2>&1 &
+        sleep 5
+        echo "✅ Checking server log:"
+        cat server.log
+
+    - name: Wait for server to start
+      run: |
+        for i in {1..10}; do
+          curl -s http://127.0.0.1:8000/ && echo "✅ Server is up!" && exit 0
+          echo "⏳ Waiting for server..."
+          sleep 2
+        done
+        echo "❌ Server failed to start!"
+        exit 1
+
+    - name: Set Up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install selenium webdriver-manager pytest chromedriver-autoinstaller
+
+    - name: Run Selenium Tests
+      run: python test2.py
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: selenium-test-results
+        path: test-results/
+
+    - name: Upload Test Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: selenium-test-logs
+        path: test-results/test_log.txt
