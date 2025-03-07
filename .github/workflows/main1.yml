@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  selenium-test:
+  test:
     runs-on: ubuntu-latest
 
     steps:
